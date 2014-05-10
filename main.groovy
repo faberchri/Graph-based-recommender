@@ -5,6 +5,7 @@ class Globals {
    static File rootDir = new File('/Users/faber/Documents/Job-ifi/BBC/dataset/feb2014'); // The location with the input files
    static String databaseDir = '/Users/faber/Documents/Job-ifi/BBC/graphRecommender/database'; // Location where graph db will be located (maybe several Gigs)
    static File outDir = new File('/Users/faber/Documents/Job-ifi/BBC/graphRecommender/out'); // Output files will be located here
+   static String lineSeparator = System.getProperty("line.separator");
 }
 
 class Parser {
@@ -113,39 +114,17 @@ class SimpleCollaborativeFilteringRecommendationStrategy {
 
 	List recommendShowsToUser(Vertex user){
 		// get all shows watched by users that also watched a show of the current user in random order
-		return user.as('currentUser').out('watched').in('watched').except('currentUser').out('watched').BBC_id.unique().toList();
+		return user.as('currentUser').out('watched').in('watched').except('currentUser').out('watched').unique().toList();
 	}
 }
 
 class RankedCollaborativeFilteringRecommendationStrategy {
 
 	List recommendShowsToUser(Vertex user){
-
 		// find all path from current user to new shows in one other user distance, count number of paths to new show, order descending by counts 
 		def showsWatchedByCurrentUser = [];
 		def res = user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
-		printRecomms(user, res); // comment out to get rid of prints
-		return res.BBC_id;
-	}
-
-	void printRecomms(def user, def res) {
-		println '-- Processing user ' + user.BBC_id + '--';
-		println '### Shows watched by user: ###'
-		def showsWatchedByCurrentUser = user.out('watched').toList();
-		showsWatchedByCurrentUser.each{show ->
-			println "${show.BBC_id} - ${show.title} - ${show.description}";
-		}
-		println '### Ordered recommendations to user: ###'
-		res.each{show ->
-			println "${show.BBC_id} - ${show.title} - ${show.description}";
-		}
-		println '-- Processing user ' + user.BBC_id + ' completed --';
-	}
-}
-
-class DummyRecommendationStrategy {
-	List recommendShowsToUser(Vertex user){
-		return ['12313','wefewfew','addf12312'];
+		return res;
 	}
 }
 
@@ -186,19 +165,49 @@ class Recommender {
 
 	List recommend() {
 		println '-- Start recommendation calculation --';
-		def uIds = parser.getTrainingUserIds();
-		//def uIds = ['100033']; // FIXME remove this!
+		//def uIds = parser.getTrainingUserIds();
+		def uIds = ['35211']; // FIXME remove this!
 		def results = [] // [userId, showId, rank, maxRank]
+		def userCount = 1;
+		def totalUserCount = uIds.size();
 		uIds.each { uId ->
-			def showsRankedForUser = strategy.recommendShowsToUser(getVertexById(uId));
+			def userVertex = getVertexById(uId);
+			def showsRankedForUser = strategy.recommendShowsToUser(userVertex);
 			def count = 1;
 			showsRankedForUser.each { rankedShow ->
-				results.add([uId, rankedShow, count, showsRankedForUser.size()]);
+				results.add([uId, rankedShow.BBC_id, count, showsRankedForUser.size()]);
 				count++;
 			}
+			printRecomms(userVertex, showsRankedForUser, userCount, totalUserCount); // comment out to get rid of prints
+			userCount++;
 		}
 		println '-- Recommendation calculation completed --';
 		return results;
+	}
+
+
+	void printRecomms(def user, def res, def userCount, def totalUserCount) {
+		def showsWatchedByCurrentUser = user.out('watched').toList();
+		println "-- Processing user ${user.BBC_id} (${userCount}/${totalUserCount}) --";
+		println "### Watched shows (${showsWatchedByCurrentUser.size()}): ###"		
+		showsWatchedByCurrentUser.each{show ->
+			def description = shortenDescription(show, 100);
+			println "${show.BBC_id} - ${show.title} - ${description}";
+		}
+		println "### Recommendations (${res.size()}, best first): ###"
+		res.eachWithIndex(){show , index ->
+			def description = shortenDescription(show, 100);
+			println "${index + 1} - ${show.BBC_id} - ${show.title} - ${description}";
+		}
+		println "-- Processing user ${user.BBC_id} completed (${userCount}/${totalUserCount}) --";
+	}
+
+	String shortenDescription(def showVertex, def length) {
+		def description = showVertex.description;
+		if (description.size() > length) {
+			return description[0..length] + "...";
+		}
+		return description;
 	}
 
 	Vertex getVertexById(String bbcId) {
@@ -213,11 +222,10 @@ class Recommender {
 		def ts = date.format('yyyy-MM-dd_HH-mm-ss');
 		def fileName = 'GraphRecomOutput_' + strategy.getClass().getSimpleName() + '_' + ts + '.csv';
 		def outFile = new File(Globals.outDir, fileName);
-		def lineSep = System.getProperty("line.separator");
 		
 		// add header
 		outFile << 'user_id, show_id, rank, max_rank';
-		outFile << lineSep;
+		outFile << Globals.lineSeparator;
 
 		// write results
 		result.each{ entry ->
@@ -228,7 +236,7 @@ class Recommender {
 			outFile << (entry[2]);
 			outFile << (',');
 			outFile << (entry[3]);
-			outFile << (lineSep);
+			outFile << (Globals.lineSeparator);
 		}
 		println '-- Writing output completed --';
 	}
