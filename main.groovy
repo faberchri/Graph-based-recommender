@@ -148,8 +148,6 @@ class Recommender {
 
 	void process() {
 		try{
-			// loadData(); // TODO: Uncomment to create graph, i.e. in first run
-
 			// get all user ids for which we want to calculate recommendations
 			//def uIds = parser.getTrainingUserIds();
 			def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
@@ -168,6 +166,7 @@ class Recommender {
 	}
 
 	void loadData(){
+		println '-- Start loading datataset into graph db --';
 		graph.createKeyIndex('BBC_id',Vertex.class);
 		def batchGraph = BatchGraph.wrap(graph);
 		println '-- TitanGrap wrapped into BatchGraph --';
@@ -178,6 +177,7 @@ class Recommender {
 		batchGraph.stopTransaction(TransactionalGraph.Conclusion.SUCCESS)
 		println '-- Graph created and all transactions committed --';
 		// printGraphStats(graph);
+		println '-- Datataset successfully loaded into graph db --';
 	}
 
 	void printGraphStats(Graph g) {
@@ -299,4 +299,7 @@ class Recommender {
 }
 
 recommender = new Recommender();
+if (args.length > 0 && (args[0].equals('-l') || args[0].equals('-load'))) {
+	recommender.loadData();
+}
 recommender.process();
