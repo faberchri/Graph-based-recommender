@@ -136,8 +136,17 @@ class Recommender {
 
 	void process() {
 		// loadData(); // TODO: Uncomment to create graph, i.e. in first run
-		def recommendations = recommend();
-		writeOutput(recommendations);
+
+		// get all user ids for which we want to calculate recommendations
+		//def uIds = parser.getTrainingUserIds();
+		def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
+		def numOfUsers = uIds.size();
+		println "Calculating recommendations for $numOfUsers users";
+		def duration = System.currentTimeMillis()  
+		def recommendations = recommend(uIds);
+		duration = (System.currentTimeMillis()  - duration) / 1000.0;
+		println "Calculating recommendations for $numOfUsers users took $duration seconds (${duration/numOfUsers} s per user).";
+
 	}
 
 	void loadData(){
@@ -163,26 +172,19 @@ class Recommender {
 		println '---------------------------------';
 	}
 
-	List recommend() {
+	void recommend(def uIds) {
 		println '-- Start recommendation calculation --';
-		//def uIds = parser.getTrainingUserIds();
-		def uIds = ['35211']; // FIXME remove this!
-		def results = [] // [userId, showId, rank, maxRank]
+		def runOutDir = createRunOutputDir();
 		def userCount = 1;
 		def totalUserCount = uIds.size();
 		uIds.each { uId ->
 			def userVertex = getVertexById(uId);
 			def showsRankedForUser = strategy.recommendShowsToUser(userVertex);
-			def count = 1;
-			showsRankedForUser.each { rankedShow ->
-				results.add([uId, rankedShow.BBC_id, count, showsRankedForUser.size()]);
-				count++;
-			}
 			printRecomms(userVertex, showsRankedForUser, userCount, totalUserCount); // comment out to get rid of prints
+			writeOutput(showsRankedForUser.BBC_id, uId, runOutDir);
 			userCount++;
 		}
 		println '-- Recommendation calculation completed --';
-		return results;
 	}
 
 
@@ -214,31 +216,41 @@ class Recommender {
 		return graph.V('BBC_id',bbcId).next();
 	}
 
-	void writeOutput(List result) {
-		println '-- Start writing output recommendations --';
-
+	File createRunOutputDir(){
 		// compile filename
 		def date = new Date();
 		def ts = date.format('yyyy-MM-dd_HH-mm-ss');
-		def fileName = 'GraphRecomOutput_' + strategy.getClass().getSimpleName() + '_' + ts + '.csv';
-		def outFile = new File(Globals.outDir, fileName);
+		def fileName = 'GraphRecomOutput_' + strategy.getClass().getSimpleName() + '_' + ts;
 		
+		// crete output directory for run
+		def runOutDir = new File(Globals.outDir, fileName);
+		runOutDir.mkdir();
+		return runOutDir;
+	}
+
+	void writeOutput(def result, def uId, def runOutDir) {
+		println "-- Start writing recommendations for user $uId --";
+		def outFile = new File(runOutDir, uId + '.csv');
+
 		// add header
 		outFile << 'user_id, show_id, rank, max_rank';
 		outFile << Globals.lineSeparator;
 
 		// write results
+		def count = 1;
+		def maxCount = result.size();
 		result.each{ entry ->
-			outFile << (entry[0]);
+			outFile << (uId);
 			outFile << (',');
-			outFile << (entry[1]);
+			outFile << (entry);
 			outFile << (',');
-			outFile << (entry[2]);
+			outFile << (count);
 			outFile << (',');
-			outFile << (entry[3]);
+			outFile << (maxCount);
 			outFile << (Globals.lineSeparator);
+			count++;
 		}
-		println '-- Writing output completed --';
+		println "-- Writing recommendations for user $uId completed --";
 	}
 
 }
