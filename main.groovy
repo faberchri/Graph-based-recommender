@@ -1,11 +1,23 @@
 // inspired by: http://markorodriguez.com/2011/09/22/a-graph-based-movie-recommender-engine/
 
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.Future
+
+import com.thinkaurelius.titan.core.*;
+import com.thinkaurelius.titan.core.attribute.*;
+import com.thinkaurelius.titan.core.util.*;
+
 class Globals {
 	// TODO: Set your paths
    static File rootDir = new File('/Users/faber/Documents/Job-ifi/BBC/dataset/feb2014'); // The location with the input files
    static String databaseDir = '/Users/faber/Documents/Job-ifi/BBC/graphRecommender/database'; // Location where graph db will be located (maybe several Gigs)
    static File outDir = new File('/Users/faber/Documents/Job-ifi/BBC/graphRecommender/out'); // Output files will be located here
    static String lineSeparator = System.getProperty("line.separator");
+   static int numberOfCalculationThreads = Runtime.getRuntime().availableProcessors();
 }
 
 class Parser {
@@ -135,18 +147,24 @@ class Recommender {
 	def strategy = new RankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
 
 	void process() {
-		// loadData(); // TODO: Uncomment to create graph, i.e. in first run
+		try{
+			// loadData(); // TODO: Uncomment to create graph, i.e. in first run
 
-		// get all user ids for which we want to calculate recommendations
-		//def uIds = parser.getTrainingUserIds();
-		def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
-		def numOfUsers = uIds.size();
-		println "Calculating recommendations for $numOfUsers users";
-		def duration = System.currentTimeMillis()  
-		def recommendations = recommend(uIds);
-		duration = (System.currentTimeMillis()  - duration) / 1000.0;
-		println "Calculating recommendations for $numOfUsers users took $duration seconds (${duration/numOfUsers} s per user).";
-
+			// get all user ids for which we want to calculate recommendations
+			//def uIds = parser.getTrainingUserIds();
+			def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
+			def numOfUsers = uIds.size();
+			println "Calculating recommendations for $numOfUsers users";
+			def duration = System.currentTimeMillis()  
+			def recommendations = recommend(uIds);
+			duration = (System.currentTimeMillis()  - duration) / 1000.0;
+			println "Calculating recommendations for $numOfUsers users took $duration seconds (${duration/numOfUsers} s per user).";
+			println 'Application terminated without exceptions.';
+		} catch(Exception e){
+			println e.printStackTrace();
+			println 'Application terminated prematurely!';
+			System.exit(-1);
+		}
 	}
 
 	void loadData(){
@@ -175,33 +193,53 @@ class Recommender {
 	void recommend(def uIds) {
 		println '-- Start recommendation calculation --';
 		def runOutDir = createRunOutputDir();
-		def userCount = 1;
+		
 		def totalUserCount = uIds.size();
-		uIds.each { uId ->
-			def userVertex = getVertexById(uId);
+		def pool = Executors.newFixedThreadPool(Globals.numberOfCalculationThreads);
+		def futures = [];
+		def defer = { c -> futures.add(pool.submit(c as Callable)) }
+		def calculate = {l_uId, l_userCount -> 
+			println "-- Start recommendation calculation for user $l_uId (${l_userCount}/${totalUserCount}) --";
+			def userVertex = getVertexById(l_uId);
 			def showsRankedForUser = strategy.recommendShowsToUser(userVertex);
-			printRecomms(userVertex, showsRankedForUser, userCount, totalUserCount); // comment out to get rid of prints
-			writeOutput(showsRankedForUser.BBC_id, uId, runOutDir);
-			userCount++;
+			def recomString = getRecommsString(userVertex, showsRankedForUser);
+			// println recomString; // print recommendations on stdout
+			writeRecommStringToFile(recomString, l_uId, runOutDir); // print recommendations to file in output dir
+			println "-- Recommendation calculation for user $l_uId completed (${l_userCount}/${totalUserCount}) --";
+			writeOutput(showsRankedForUser, l_uId, runOutDir, l_userCount, totalUserCount);
+		}
+
+		uIds.eachWithIndex { uId, i ->
+			defer{ calculate(uId, i + 1) };
+		}
+		pool.shutdown();
+		futures.each { f ->
+			try {
+				f.get();
+			} catch(Exception e) {
+				throw new RuntimeException("Exception in ExecutorService", e);
+			}
 		}
 		println '-- Recommendation calculation completed --';
 	}
 
-
-	void printRecomms(def user, def res, def userCount, def totalUserCount) {
+	String getRecommsString(def user, def res) {
 		def showsWatchedByCurrentUser = user.out('watched').toList();
-		println "-- Processing user ${user.BBC_id} (${userCount}/${totalUserCount}) --";
-		println "### Watched shows (${showsWatchedByCurrentUser.size()}): ###"		
+		def sb = new StringBuilder();
+		sb.append("### Watched shows (${showsWatchedByCurrentUser.size()}): ###");		
 		showsWatchedByCurrentUser.each{show ->
 			def description = shortenDescription(show, 100);
-			println "${show.BBC_id} - ${show.title} - ${description}";
+			sb.append(Globals.lineSeparator);
+			sb.append("${show.BBC_id} - ${show.title} - ${description}");
 		}
-		println "### Recommendations (${res.size()}, best first): ###"
+		sb.append(Globals.lineSeparator);
+		sb.append("### Recommendations (${res.size()}, best first): ###");
 		res.eachWithIndex(){show , index ->
 			def description = shortenDescription(show, 100);
-			println "${index + 1} - ${show.BBC_id} - ${show.title} - ${description}";
+			sb.append(Globals.lineSeparator);
+			sb.append("${index + 1} - ${show.BBC_id} - ${show.title} - ${description}");
 		}
-		println "-- Processing user ${user.BBC_id} completed (${userCount}/${totalUserCount}) --";
+		return sb.toString();
 	}
 
 	String shortenDescription(def showVertex, def length) {
@@ -228,8 +266,13 @@ class Recommender {
 		return runOutDir;
 	}
 
-	void writeOutput(def result, def uId, def runOutDir) {
-		println "-- Start writing recommendations for user $uId --";
+	void writeRecommStringToFile(def string, def uId, def runOutDir) {
+		def outFile = new File(runOutDir, uId + '-description.txt');
+		outFile << string;
+	}
+
+	void writeOutput(def result, def uId, def runOutDir, def userCount, def totalUserCount) {
+		println "-- Start writing recommendations for user $uId (${userCount}/${totalUserCount}) --";
 		def outFile = new File(runOutDir, uId + '.csv');
 
 		// add header
@@ -242,7 +285,7 @@ class Recommender {
 		result.each{ entry ->
 			outFile << (uId);
 			outFile << (',');
-			outFile << (entry);
+			outFile << (entry.BBC_id);
 			outFile << (',');
 			outFile << (count);
 			outFile << (',');
@@ -250,7 +293,7 @@ class Recommender {
 			outFile << (Globals.lineSeparator);
 			count++;
 		}
-		println "-- Writing recommendations for user $uId completed --";
+		println "-- Writing recommendations for user $uId completed (${userCount}/${totalUserCount}) --";
 	}
 
 }
