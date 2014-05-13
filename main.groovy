@@ -62,34 +62,55 @@ class Parser {
 		//descriptions.each { def entry -> println "$entry.key: $entry.value"}
 		
 		// load attributes
-		def attributes = [:];
-		def header = [];
-		def firstLine = true;
-		new File(datasetDir, 'attributeMatrix/matrix.csv').eachLine {def line ->
-			def components = line.split(',');
-			if (firstLine) {
-				header = components;
-				firstLine = false;
-			} else {			
-				def showId = components[0];
-				allShowIds.add(showId);
-				def values = [];
-	  			components[1..<components.size()].eachWithIndex{ att, index ->
-	  				if (att.equals('1')) {
-	  					values.add(header[index]);
-	  				}
-	  			}
-	  			attributes.put(showId, values);
-	  		}			
+		def attributeTagCounts = [:];
+		def showIdAttributes = [:];
+		new File(datasetDir, 'attributes.csv').eachLine {def line ->
+			def components = line.split(',', 2);
+			def showId = components[0];
+			def showAtts = showIdAttributes.get(showId);
+			if (showAtts == null) {
+				showAtts = [] as Set;
+			}
+			def showAtt = components[1];
+			while (true) {				
+				def attributeTagCount = attributeTagCounts.get(showAtt);
+				if (attributeTagCount == null) {
+					attributeTagCounts.put(showAtt, 1);
+				} else {
+					if (! showAtts.contains(showAtt)){
+						attributeTagCounts.put(showAtt, attributeTagCount + 1);
+					}
+				}
+				showAtts.add(showAtt);
+				if (showAtt.contains('/')) {
+					int splitIndex = showAtt.lastIndexOf('/');
+					showAtt = showAtt.substring(0,splitIndex);
+				} else {
+					showIdAttributes.put(showId, showAtts);
+					break;
+				}
+			}
 		}
-		//println header;
-		//println attributes;
+		//		showIdAttributes.each {
+		//			println "${it.key} - ${it.value}";
+		//		}
+		//		attributeTagCounts.each {
+		//			println "${it.key} - ${it.value}";
+		//		}
+
 
 		// create attribute vertices
 		def attributeVertexMap = [:]
-		header.each {attribute -> 
-			def attVertex = g.addVertex(attribute,['type':'Attribute', 'attribute':attribute]);
-			attributeVertexMap.put(attribute, attVertex);
+		def numOfShowsWithAttributes = showIdAttributes.size();
+		def superfluousAttributes = [] as Set
+		attributeTagCounts.each {attribute, count -> 
+			if (count < numOfShowsWithAttributes) {
+				// we don't want to create attribute vertices for attributes that occur for every show, e.g. 'service' and 'genres'
+				def attVertex = g.addVertex(attribute,['type':'Attribute', 'attribute':attribute]);
+				attributeVertexMap.put(attribute, attVertex);
+			} else {
+				superfluousAttributes.add(attribute);
+			}
 		}
 
 		// create show vertices and link to attribute vertices
@@ -98,9 +119,13 @@ class Parser {
 		allShowIds.each {showId -> 
 			def showVertex = g.addVertex(showId, ['type':'Show', 'BBC_id':showId, 'title':titles.get(showId), 'description':descriptions.get(showId)]);
 			showVertexMap.put(showId, showVertex);
-			def showAtts = attributes.get(showId);
+			def showAtts = showIdAttributes.get(showId);
 			showAtts.each {att ->
-				g.addEdge(showVertex, attributeVertexMap.get(att), 'hasAttribute');
+				if (!superfluousAttributes.contains(att)){
+					def attVertex = attributeVertexMap.get(att);
+					// println "Adding edge 'hasAttribute from $showVertex to $attVertex"
+					g.addEdge(showVertex, attVertex, 'hasAttribute');
+				}
 			}
 		}
 		
@@ -157,14 +182,14 @@ class Recommender {
 		if (loadFile.getName().equals('tinkergraph.dat')) {
 			println "-- Start loading serialized graph from $loadLoc --"
 			this.graph = storage.load(loadFile.getParent());
-			println "-- Serialized graph successfully loaded --"
+			println "-- Serialized graph successfully loaded: $graph --"
 		} else {
 			this.graph = new TinkerGraph();
 			println "-- New in-memory graph created: $graph --"
 			println "-- Start loading graph from dataset --"
 			this.parser = new Parser(loadFile);
 			loadData();
-			println "-- Loading graph from dataset completed --"
+			println "-- Loading graph from dataset completed: $graph --"
 		}
 		if (saveLoc instanceof String) {
 			def saveLocFileP = new File(saveLoc);
@@ -193,7 +218,6 @@ class Recommender {
 
 	void process(def uIds) {
 		try{
-
 			// def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
 			def numOfUsers = uIds.size();
 			println "Calculating recommendations for $numOfUsers users";
