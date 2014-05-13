@@ -7,26 +7,27 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.Future
 
-import com.thinkaurelius.titan.core.*;
-import com.thinkaurelius.titan.core.attribute.*;
-import com.thinkaurelius.titan.core.util.*;
+import java.text.*
 
 class Globals {
-	// TODO: Set your paths
-   static File rootDir = new File('/Users/faber/Documents/Job-ifi/BBC/dataset/feb2014'); // The location with the input files
-   static String databaseDir = '/Users/faber/Documents/Job-ifi/BBC/graphRecommender/database'; // Location where graph db will be located (maybe several Gigs)
-   static File outDir = new File('/Users/faber/Documents/Job-ifi/BBC/graphRecommender/out'); // Output files will be located here
-   static String lineSeparator = System.getProperty("line.separator");
-   static int numberOfCalculationThreads = Runtime.getRuntime().availableProcessors();
+	static String lineSeparator = System.getProperty("line.separator");
+	static int numberOfCalculationThreads = Runtime.getRuntime().availableProcessors();
 }
 
 class Parser {
+
+	def datasetDir;
+
+	Parser(def datasetDir) {
+		this.datasetDir = datasetDir;
+	}
+
 	Map loadShowVertices(Graph g) {
 		def allShowIds = [] as Set;
 		
 		// load titles
 		def titles = [:];
-		new File(Globals.rootDir, 'titles.csv').eachLine {def line ->
+		new File(datasetDir, 'titles.csv').eachLine {def line ->
 	  		def components = line.split(',',2);
 	  		allShowIds.add(components[0]);
 			titles.put(components[0],components[1]);
@@ -35,7 +36,7 @@ class Parser {
 
 		// load descriptions
 		def descriptions = [:];
-		new File(Globals.rootDir, 'descriptions.csv').eachLine {def line ->
+		new File(datasetDir, 'descriptions.csv').eachLine {def line ->
 	  		def components = line.split(',',2);
 	  		allShowIds.add(components[0]);
 			descriptions.put(components[0], components[1]);
@@ -46,7 +47,7 @@ class Parser {
 		def attributes = [:];
 		def header = [];
 		def firstLine = true;
-		new File(Globals.rootDir, 'attributeMatrix/matrix.csv').eachLine {def line ->
+		new File(datasetDir, 'attributeMatrix/matrix.csv').eachLine {def line ->
 			def components = line.split(',');
 			if (firstLine) {
 				header = components;
@@ -93,7 +94,7 @@ class Parser {
 		// create user vertices and link to show vertices
 		def userVertexMap = [:];
 		def currentLine = 0;
-		new File(Globals.rootDir, 'training.csv').eachLine {def line ->
+		new File(datasetDir, 'training.csv').eachLine {def line ->
 	  		def components = line.split(',');
 	  		def uId = components[0];
 	  		def showId = components[1];
@@ -113,7 +114,7 @@ class Parser {
 
 	Set getTrainingUserIds() {
 		def uIds = [];
-		new File(Globals.rootDir, 'training.csv').eachLine {def line ->
+		new File(datasetDir, 'training.csv').eachLine {def line ->
 	  		def components = line.split(',');
 	  		def uId = components[0];
 	  		uIds.add(uId);
@@ -142,15 +143,52 @@ class RankedCollaborativeFilteringRecommendationStrategy {
 
 class Recommender {
 
-	//def graph = TitanFactory.open(Globals.databaseDir);
-	def graph = new TinkerGraph();
-	def parser = new Parser();
+	def graph;
+	def parser;
+	def rootOuputDir;
 	def strategy = new RankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
 
-	void process() {
+	Recommender(def loadLoc, def rootOuputDir, def saveLoc){
+		def storage = TinkerStorageFactory.getInstance().getTinkerStorage(TinkerGraph.FileType.JAVA);
+		if (loadLoc == null) {
+			throw new IllegalArgumentException("No dataset / serialized graph location specified")
+		}
+		def loadFile = new File (loadLoc);
+		if (loadFile.getName().equals('tinkergraph.dat')) {
+			println "-- Start loading serialized graph from $loadLoc --"
+			this.graph = storage.load(loadFile.getParent());
+			println "-- Serialized graph successfully loaded --"
+		} else {
+			this.graph = new TinkerGraph();
+			println "-- New in-memory graph created: $graph --"
+			println "-- Start loading graph from dataset --"
+			this.parser = new Parser(loadFile);
+			loadData();
+			println "-- Loading graph from dataset completed --"
+		}
+		if (saveLoc != null) {
+			saveLocFileP = new File(saveLoc);
+			def date = new Date();
+			def ts = date.format('yyyy-MM-dd_HH-mm-ss');
+			def dirName = 'serialized-graph_' + ts;
+			saveLocFileC = new File(saveLocFileP, dirName)
+			println "-- Start serializing graph to $saveLocFileC --"
+			storage.save(this.graph, saveLocFileC.getAbsolutePath());
+			println "-- Graph successfully serialized --"
+		}
+		this.rootOuputDir = new File(rootOuputDir);
+	}
+
+	void process(def uIds) {
 		try{
-			// get all user ids for which we want to calculate recommendations
-			def uIds = parser.getTrainingUserIds();
+			if (uIds == null) {
+				// get all user ids in graph if no user ids provided
+				if (parser != null) {
+					uIds = parser.getTrainingUserIds();
+				} else {
+					uIds = getUserIdsInGraph();
+				}
+			}
 			// def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
 			def numOfUsers = uIds.size();
 			println "Calculating recommendations for $numOfUsers users";
@@ -170,7 +208,7 @@ class Recommender {
 		println '-- Start loading datataset into graph db --';
 		graph.createKeyIndex('BBC_id',Vertex.class);
 		def batchGraph = BatchGraph.wrap(graph);
-		println '-- TitanGrap wrapped into BatchGraph --';
+		println '-- TinkerGrap wrapped into BatchGraph --';
 		def showVertexMap = parser.loadShowVertices(batchGraph);
 		println '-- Show vertices loaded --';
 		parser.loadUserVertices(batchGraph, showVertexMap);
@@ -255,6 +293,10 @@ class Recommender {
 		return graph.V('BBC_id',bbcId).next();
 	}
 
+	List getUserIdsInGraph() {
+		return graph.V.filter{it.'type' == 'User'}.BBC_id.toList();
+	}
+
 	File createRunOutputDir(){
 		// compile filename
 		def date = new Date();
@@ -262,8 +304,8 @@ class Recommender {
 		def fileName = 'GraphRecomOutput_' + strategy.getClass().getSimpleName() + '_' + ts;
 		
 		// crete output directory for run
-		def runOutDir = new File(Globals.outDir, fileName);
-		runOutDir.mkdir();
+		def runOutDir = new File(rootOuputDir, fileName);
+		runOutDir.mkdirs();
 		return runOutDir;
 	}
 
@@ -299,8 +341,22 @@ class Recommender {
 
 }
 
-recommender = new Recommender();
-if (args.length > 0 && (args[0].equals('-l') || args[0].equals('--load'))) {
-	recommender.loadData();
+println "Your input arguments: $args"
+
+// command line args processing
+cli = new CliBuilder(usage: 'main.groovy [-p <directory-to-persist-graph>] [-u <comma-separated-list-of-user-ids>] <path-to-dir-with-dataset-or-file-of-serialized-graph> <output-directory>')
+cli.with{
+	h longOpt: 'help', 'Show usage information'
+	p longOpt: 'persist-graph', args: 1, argName: 'path', 'Persist the in-memory graph after loading of the dataset to disk at location "path"'
+	u longOpt: 'users-to-recommend', args: 1, argName: 'users', 'Comma separated list of user ids (need to be contained in the graph) for which we want to generate recommendations'
 }
-recommender.process();
+def options = cli.parse(args)
+if (!options || options.h) {
+	cli.usage()
+	System.exit(0);
+}
+
+def inputOutput = options.arguments();
+
+recommender = new Recommender(inputOutput[0], inputOutput[1], options.p);
+recommender.process(options.u.split(','));
