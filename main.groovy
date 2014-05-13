@@ -14,6 +14,24 @@ class Globals {
 	static int numberOfCalculationThreads = Runtime.getRuntime().availableProcessors();
 }
 
+class SimpleCollaborativeFilteringRecommendationStrategy {
+
+	List recommendShowsToUser(Vertex user){
+		// get all shows watched by users that also watched a show of the current user in random order
+		return user.as('currentUser').out('watched').in('watched').except('currentUser').out('watched').unique().toList();
+	}
+}
+
+class RankedCollaborativeFilteringRecommendationStrategy {
+
+	List recommendShowsToUser(Vertex user){
+		// find all path from current user to new shows in one other user distance, count number of paths to new show, order descending by counts 
+		def showsWatchedByCurrentUser = [];
+		def res = user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
+		return res;
+	}
+}
+
 class Parser {
 
 	def datasetDir;
@@ -123,24 +141,6 @@ class Parser {
 	}
 }
 
-class SimpleCollaborativeFilteringRecommendationStrategy {
-
-	List recommendShowsToUser(Vertex user){
-		// get all shows watched by users that also watched a show of the current user in random order
-		return user.as('currentUser').out('watched').in('watched').except('currentUser').out('watched').unique().toList();
-	}
-}
-
-class RankedCollaborativeFilteringRecommendationStrategy {
-
-	List recommendShowsToUser(Vertex user){
-		// find all path from current user to new shows in one other user distance, count number of paths to new show, order descending by counts 
-		def showsWatchedByCurrentUser = [];
-		def res = user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
-		return res;
-	}
-}
-
 class Recommender {
 
 	def graph;
@@ -166,29 +166,34 @@ class Recommender {
 			loadData();
 			println "-- Loading graph from dataset completed --"
 		}
-		if (saveLoc != null) {
-			saveLocFileP = new File(saveLoc);
+		if (saveLoc instanceof String) {
+			def saveLocFileP = new File(saveLoc);
 			def date = new Date();
 			def ts = date.format('yyyy-MM-dd_HH-mm-ss');
 			def dirName = 'serialized-graph_' + ts;
-			saveLocFileC = new File(saveLocFileP, dirName)
+			def saveLocFileC = new File(saveLocFileP, dirName)
 			println "-- Start serializing graph to $saveLocFileC --"
+			saveLocFileC.mkdirs()
 			storage.save(this.graph, saveLocFileC.getAbsolutePath());
 			println "-- Graph successfully serialized --"
 		}
 		this.rootOuputDir = new File(rootOuputDir);
 	}
 
+	void process() {
+		// get all user ids in graph if no user ids provided
+		def uIds
+		if (parser != null) {
+			uIds = parser.getTrainingUserIds();
+		} else {
+			uIds = getUserIdsInGraph();
+		}	
+		process(uIds);
+	}
+
 	void process(def uIds) {
 		try{
-			if (uIds == null) {
-				// get all user ids in graph if no user ids provided
-				if (parser != null) {
-					uIds = parser.getTrainingUserIds();
-				} else {
-					uIds = getUserIdsInGraph();
-				}
-			}
+
 			// def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
 			def numOfUsers = uIds.size();
 			println "Calculating recommendations for $numOfUsers users";
@@ -351,7 +356,7 @@ cli.with{
 	u longOpt: 'users-to-recommend', args: 1, argName: 'users', 'Comma separated list of user ids (need to be contained in the graph) for which we want to generate recommendations'
 }
 def options = cli.parse(args)
-if (!options || options.h) {
+if (args.length < 2 || !options || options.h) {
 	cli.usage()
 	System.exit(0);
 }
@@ -359,4 +364,8 @@ if (!options || options.h) {
 def inputOutput = options.arguments();
 
 recommender = new Recommender(inputOutput[0], inputOutput[1], options.p);
-recommender.process(options.u.split(','));
+if (options.u){
+	recommender.process(options.u.split(','));
+} else {
+	recommender.process();
+}
