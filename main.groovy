@@ -93,7 +93,7 @@ class Parser {
 		// create user vertices and link to show vertices
 		def userVertexMap = [:];
 		def currentLine = 0;
-		new File(Globals.rootDir, 'smallerDataset/training.csv').eachLine {def line ->
+		new File(Globals.rootDir, 'training.csv').eachLine {def line ->
 	  		def components = line.split(',');
 	  		def uId = components[0];
 	  		def showId = components[1];
@@ -113,7 +113,7 @@ class Parser {
 
 	Set getTrainingUserIds() {
 		def uIds = [];
-		new File(Globals.rootDir, 'smallerDataset/training.csv').eachLine {def line ->
+		new File(Globals.rootDir, 'training.csv').eachLine {def line ->
 	  		def components = line.split(',');
 	  		def uId = components[0];
 	  		uIds.add(uId);
@@ -142,15 +142,16 @@ class RankedCollaborativeFilteringRecommendationStrategy {
 
 class Recommender {
 
-	def graph = TitanFactory.open(Globals.databaseDir);
+	//def graph = TitanFactory.open(Globals.databaseDir);
+	def graph = new TinkerGraph();
 	def parser = new Parser();
 	def strategy = new RankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
 
 	void process() {
 		try{
 			// get all user ids for which we want to calculate recommendations
-			//def uIds = parser.getTrainingUserIds();
-			def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
+			def uIds = parser.getTrainingUserIds();
+			// def uIds = ['35211', '603245', '135588', '7369', '540624', '123274']; // FIXME for quick tests; remove this!
 			def numOfUsers = uIds.size();
 			println "Calculating recommendations for $numOfUsers users";
 			def duration = System.currentTimeMillis()  
@@ -299,7 +300,7 @@ class Recommender {
 }
 
 recommender = new Recommender();
-if (args.length > 0 && (args[0].equals('-l') || args[0].equals('-load'))) {
+if (args.length > 0 && (args[0].equals('-l') || args[0].equals('--load'))) {
 	recommender.loadData();
 }
 recommender.process();
