@@ -148,7 +148,7 @@ class Parser {
 	  			userVertexMap.put(uId, userVertex);
 	  		}
 	  		g.addEdge(userVertex, showVertex, 'watched');
-	  		if (currentLine % 10000 == 0) {
+	  		if (currentLine % 50000 == 0) {
 	  			println 'Number of processed lines of training file: ' + currentLine;
 	  		}
 	  		currentLine++;
@@ -191,6 +191,7 @@ class Recommender {
 			loadData();
 			println "-- Loading graph from dataset completed: $graph --"
 		}
+		printGraphStats(graph);
 		if (saveLoc instanceof String) {
 			def saveLocFileP = new File(saveLoc);
 			def date = new Date();
@@ -244,17 +245,18 @@ class Recommender {
 		println '-- User vertices loaded --';
 		batchGraph.stopTransaction(TransactionalGraph.Conclusion.SUCCESS)
 		println '-- Graph created and all transactions committed --';
-		// printGraphStats(graph);
 		println '-- Datataset successfully loaded into graph db --';
 	}
 
 	void printGraphStats(Graph g) {
-		println '-- Some basic graph properties --';
-		println 'Number of vertices: ' + g.V.count();
-		// println 'Number of edges: ' + g.E.count(); takes too much time
-		println 'Number of vertices of type show: ' + g.V('type','Show').count();
-		println 'Number of vertices of type user: ' + g.V('type','User').count();
-		println 'Number of vertices of type attribute: ' + g.V('type','Attribute').count();
+		println "-- Some basic graph properties:";
+		println "---- Number of vertices: " + g.V.count();
+		println "---- Number of vertices of type 'Show': " + g.V('type','Show').count();
+		println "---- Number of vertices of type 'User': " + g.V('type','User').count();
+		println "---- Number of vertices of type 'Attribute': " + g.V('type','Attribute').count();
+		println "---- Number of edges: " + g.E.count();
+		println "---- Number of edges of type 'hasAttribute': " + g.E.has('label','hasAttribute').count();
+		println "---- Number of edges of type 'watched': " + g.E.has('label','watched').count();
 		println '---------------------------------';
 	}
 
