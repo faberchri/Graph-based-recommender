@@ -106,4 +106,74 @@ interface IRecommendationStrategy{
     Application terminated without exceptions.
     ````
 
+* `ItemAttributesConsideringRankedCollaborativeFilteringRecommendationStrategy`: Collaborative filtering with mixed in metadata / attributes similarity. Recommended are shows that have not been watched by the current user but by users that watched at least one of the shows that the current user watched OR shows that have a common attribute. The retrieved shows are ranked by the number of shortest paths (length == 3) from the current user to the new shows, either passing through an other user or a shared attribute.
+
+    ```groovy
+    class ItemAttributesConsideringRankedCollaborativeFilteringRecommendationStrategy implements IRecommendationStrategy{
+        List recommendShowsToUser(Vertex user){
+            // find all path from current user to new shows in one other user or an attribute distance, count number of paths to new show, order descending by counts 
+            def showsWatchedByCurrentUser = [];
+            return user.out('watched').aggregate(showsWatchedByCurrentUser).both('watched','hasAttribute').both('watched', 'hasAttribute').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
+        }
+    }
+    ```
+    If we apply this strategy on the sample graph with:
+
+    ```bash
+    titan-all-0.4.4/bin/gremlin.sh -e graphRecommender/main.groovy -t -u U1,U6,U12 . .
+    ```
+    We get:
+
+    ```bash
+    Your input arguments: [-t, -u, U1,U6,U12, ., .]
+    -- Test graph loaded: tinkergraph[vertices:24 edges:36] --
+    -- Some basic graph properties:
+    ---- Number of vertices: 24
+    ---- Number of vertices of type 'Show': 7
+    ---- Number of vertices of type 'User': 14
+    ---- Number of vertices of type 'Attribute': 3
+    ---- Number of edges: 36
+    ---- Number of edges of type 'hasAttribute': 11
+    ---- Number of edges of type 'watched': 25
+    ---------------------------------
+    Calculating recommendations for 3 users
+    -- Start recommendation calculation --
+    -- Start recommendation calculation for user U1 (1/3) --
+    ### Watched shows (5): ###
+    S6 - <NA> - <NA>
+    S7 - <NA> - <NA>
+    S6 - <NA> - <NA>
+    S1 - <NA> - <NA>
+    S1 - <NA> - <NA>
+    ### Recommendations (4, best first): ###
+    1 - S5 - <NA> - <NA>
+    2 - S2 - <NA> - <NA>
+    3 - S3 - <NA> - <NA>
+    4 - S4 - <NA> - <NA>
+    -- Recommendation calculation for user U1 completed (1/3) --
+    -- Start recommendation calculation for user U6 (2/3) --
+    ### Watched shows (1): ###
+    S5 - <NA> - <NA>
+    ### Recommendations (5, best first): ###
+    1 - S6 - <NA> - <NA>
+    2 - S7 - <NA> - <NA>
+    3 - S3 - <NA> - <NA>
+    4 - S4 - <NA> - <NA>
+    5 - S2 - <NA> - <NA>
+    -- Recommendation calculation for user U6 completed (2/3) --
+    -- Start recommendation calculation for user U12 (3/3) --
+    ### Watched shows (3): ###
+    S2 - <NA> - <NA>
+    S3 - <NA> - <NA>
+    S1 - <NA> - <NA>
+    ### Recommendations (4, best first): ###
+    1 - S7 - <NA> - <NA>
+    2 - S6 - <NA> - <NA>
+    3 - S4 - <NA> - <NA>
+    4 - S5 - <NA> - <NA>
+    -- Recommendation calculation for user U12 completed (3/3) --
+    -- Recommendation calculation completed --
+    Calculating recommendations for 3 users took 0.156 seconds (0.052 s per user).
+    Application terminated without exceptions.
+    ````
 
