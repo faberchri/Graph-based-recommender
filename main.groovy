@@ -36,6 +36,15 @@ class RankedCollaborativeFilteringRecommendationStrategy implements IRecommendat
 	}
 }
 
+class ItemAttributesConsideringRankedCollaborativeFilteringRecommendationStrategy implements IRecommendationStrategy{
+
+	List recommendShowsToUser(Vertex user){
+		// find all path from current user to new shows in one other user or an attribute distance, count number of paths to new show, order descending by counts 
+		def showsWatchedByCurrentUser = [];
+		return user.out('watched').aggregate(showsWatchedByCurrentUser).both('watched','hasAttribute').both('watched', 'hasAttribute').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
+	}
+}
+
 class Parser {
 
 	def datasetDir;
