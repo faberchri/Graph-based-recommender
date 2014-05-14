@@ -176,6 +176,24 @@ class Recommender {
 	def rootOuputDir;
 	IRecommendationStrategy strategy = new RankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
 
+	def writeOutputToFile = true;
+	def writeDescriptionToFile = true;
+	def writeDescriptionToStdOut = false;
+
+	Recommender(){
+		this.writeOutputToFile = false;
+		this.writeDescriptionToFile = false;
+		this.writeDescriptionToStdOut = true;
+
+		def sampleGraph = new SampleGraph();
+		this.graph = sampleGraph.getGraph();
+		println "-- Test graph loaded: $graph --"
+		printGraphStats(graph);
+
+		// set the number of calc threads to 1 in order to prevent of screwed up cl output
+		Globals.numberOfCalculationThreads = 1;
+	}
+
 	Recommender(def loadLoc, def rootOuputDir, def saveLoc){
 		def storage = TinkerStorageFactory.getInstance().getTinkerStorage(TinkerGraph.FileType.JAVA);
 		if (loadLoc == null) {
@@ -265,7 +283,10 @@ class Recommender {
 
 	void recommend(def uIds) {
 		println '-- Start recommendation calculation --';
-		def runOutDir = createRunOutputDir();
+		def runOutDir
+		if (writeOutputToFile || writeDescriptionToFile) {
+			 runOutDir = createRunOutputDir();
+		}
 		
 		def totalUserCount = uIds.size();
 		def pool = Executors.newFixedThreadPool(Globals.numberOfCalculationThreads);
@@ -275,11 +296,20 @@ class Recommender {
 			println "-- Start recommendation calculation for user $l_uId (${l_userCount}/${totalUserCount}) --";
 			def userVertex = getVertexById(l_uId);
 			def showsRankedForUser = strategy.recommendShowsToUser(userVertex);
-			def recomString = getRecommsString(userVertex, showsRankedForUser);
-			// println recomString; // print recommendations on stdout
-			writeRecommStringToFile(recomString, l_uId, runOutDir); // print recommendations to file in output dir
+			def recomString
+			if (writeDescriptionToStdOut || writeDescriptionToFile){
+				recomString = getRecommsString(userVertex, showsRankedForUser);
+			}
+			if (writeDescriptionToStdOut){
+				println recomString; 
+			}
+			if (writeDescriptionToFile){
+				writeRecommStringToFile(recomString, l_uId, runOutDir); // print recommendations to file in output dir
+			}
 			println "-- Recommendation calculation for user $l_uId completed (${l_userCount}/${totalUserCount}) --";
-			writeOutput(showsRankedForUser, l_uId, runOutDir, l_userCount, totalUserCount);
+			if (writeOutputToFile){
+				writeOutput(showsRankedForUser, l_uId, runOutDir, l_userCount, totalUserCount);
+			}
 		}
 
 		uIds.eachWithIndex { uId, i ->
@@ -375,6 +405,53 @@ class Recommender {
 
 }
 
+class SampleGraph{
+
+	Graph getGraph(){
+		// example graph structure
+		def usersToShow = ["U1":["S1", "S1", "S7", "S6", "S6"], "U2":["S6"], "U3":["S6"], "U4":["S5"], "U5":["S5","S5","S6"], "U6":["S5"], "U7":["S5"], "U8":["S5"], "U9":["S3", "S3"], "U10":["S3"], "U11":["S3"], "U12":["S1", "S2", "S3"], "U13":["S2", "S2"], "U14":["S1","S2"]]
+		def showsToAttributes = ["S1":["A1"], "S2":["A1", "A3"], "S3":["A3"], "S4":["A3"], "S5":["A2", "A3"], "S6":["A2"], "S7":["A1", "A2", "A3"]]
+		
+		// create example graph
+		def g = new TinkerGraph();
+		def attIdVertex = [:]
+		def showIdVertex = [:]
+		def uIdVertex = [:]
+
+		showsToAttributes.each {showId, attIds ->
+			def showVertex = showIdVertex.get(showId);
+			if (showVertex == null) {
+				showVertex = g.addVertex(showId, ['type':'Show', 'BBC_id':showId, 'title':"<NA>", 'description':"<NA>"]);
+				showIdVertex.put(showId, showVertex);
+			}
+			attIds.each{attId ->
+				def attVertex = attIdVertex.get(attId);
+				if (attVertex == null) {
+					attVertex = g.addVertex(attId,['type':'Attribute', 'attribute':attId]);
+					attIdVertex.put(attId, attVertex);
+				}
+				g.addEdge(showVertex, attVertex, 'hasAttribute');
+			}
+		}
+		usersToShow.each {uId, showIds ->
+			def userVertex = uIdVertex.get(uId);
+			if (userVertex == null) {
+				userVertex = g.addVertex(uId, ['type':'User', 'BBC_id':uId]);
+				uIdVertex.put(uId, userVertex);
+			}
+			showIds.each {showId ->
+				def showVertex = showIdVertex.get(showId);
+				if (showVertex == null) {
+					showVertex = g.addVertex(showId, ['type':'Show', 'BBC_id':showId, 'title':"<NA>", 'description':"<NA>"]);
+					showIdVertex.put(showId, showVertex);
+				}
+				g.addEdge(userVertex, showVertex, 'watched');
+			}
+		}
+		return g;
+	}
+}
+
 println "Your input arguments: $args"
 
 // command line args processing
@@ -383,6 +460,7 @@ cli.with{
 	h longOpt: 'help', 'Show usage information'
 	p longOpt: 'persist-graph', args: 1, argName: 'path', 'Persist the in-memory graph after loading of the dataset to disk at location "path"'
 	u longOpt: 'users-to-recommend', args: 1, argName: 'users', 'Comma separated list of user ids (need to be contained in the graph) for which we want to generate recommendations'
+	t longOpt: 'test-mode', 'Load the hard coded sample graph and use for recommendation generation. Output is printed on StdOut only.'
 }
 def options = cli.parse(args)
 if (args.length < 2 || !options || options.h) {
@@ -390,9 +468,14 @@ if (args.length < 2 || !options || options.h) {
 	System.exit(0);
 }
 
-def inputOutput = options.arguments();
+def recommender;
+if (options.t){
+	recommender = new Recommender()
+} else {
+	def inputOutput = options.arguments();
+	recommender = new Recommender(inputOutput[0], inputOutput[1], options.p);
+}
 
-recommender = new Recommender(inputOutput[0], inputOutput[1], options.p);
 if (options.u){
 	recommender.process(options.u.split(','));
 } else {
