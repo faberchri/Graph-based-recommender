@@ -27,7 +27,7 @@ Graphs queried for recommendations have the structure depicted below.
 * User -> Show edge: 'watched'
 * Show -> Attribute edge: 'show has attribute'
 
-![][sample-graph.svg]
+![Alt text](sample-graph.svg)
 
 
 Recommendation Strategies
