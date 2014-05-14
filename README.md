@@ -29,15 +29,16 @@ interface IRecommendationStrategy{
 ````
 
 * `RankedCollaborativeFilteringRecommendationStrategy`: Pure collaborative filtering. Recommended are shows that have not been watched by the current user but by users that watched at least one of the shows that the current user watched. The retrieved shows are ranked by the number of shortest paths (length == 3) from the current user to the new shows.
-```groovy
-class RankedCollaborativeFilteringRecommendationStrategy implements IRecommendationStrategy{
-	List recommendShowsToUser(Vertex user){
-		// find all path from current user to new shows in one other user distance, count number of paths to new show, order descending by counts 
-		def showsWatchedByCurrentUser = [];
-		def res = user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
-		return res;
-	}
-}
-```
+
+    ```groovy
+    class RankedCollaborativeFilteringRecommendationStrategy implements IRecommendationStrategy{
+        List recommendShowsToUser(Vertex user){
+            // find all path from current user to new shows in one other user distance, count number of paths to new show, order descending by counts 
+            def showsWatchedByCurrentUser = [];
+            // gremlin code follows
+            return user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
+        }
+    }
+    ```
 
 
