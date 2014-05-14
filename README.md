@@ -53,5 +53,57 @@ interface IRecommendationStrategy{
         }
     }
     ```
+    If we apply this strategy on the sample graph with:
+
+    ```bash
+    titan-all-0.4.4/bin/gremlin.sh -e graphRecommender/main.groovy -t -u U1,U6,U12 . .
+    ```
+    We get:
+
+    ```bash
+    Your input arguments: [-t, -u, U1,U6,U12, ., .]
+    -- Test graph loaded: tinkergraph[vertices:24 edges:36] --
+    -- Some basic graph properties:
+    ---- Number of vertices: 24
+    ---- Number of vertices of type 'Show': 7
+    ---- Number of vertices of type 'User': 14
+    ---- Number of vertices of type 'Attribute': 3
+    ---- Number of edges: 36
+    ---- Number of edges of type 'hasAttribute': 11
+    ---- Number of edges of type 'watched': 25
+    ---------------------------------
+    Calculating recommendations for 3 users
+    -- Start recommendation calculation --
+    -- Start recommendation calculation for user U1 (1/3) --
+    ### Watched shows (5): ###
+    S6 - <NA> - <NA>
+    S7 - <NA> - <NA>
+    S6 - <NA> - <NA>
+    S1 - <NA> - <NA>
+    S1 - <NA> - <NA>
+    ### Recommendations (3, best first): ###
+    1 - S5 - <NA> - <NA>
+    2 - S2 - <NA> - <NA>
+    3 - S3 - <NA> - <NA>
+    -- Recommendation calculation for user U1 completed (1/3) --
+    -- Start recommendation calculation for user U6 (2/3) --
+    ### Watched shows (1): ###
+    S5 - <NA> - <NA>
+    ### Recommendations (1, best first): ###
+    1 - S6 - <NA> - <NA>
+    -- Recommendation calculation for user U6 completed (2/3) --
+    -- Start recommendation calculation for user U12 (3/3) --
+    ### Watched shows (3): ###
+    S2 - <NA> - <NA>
+    S3 - <NA> - <NA>
+    S1 - <NA> - <NA>
+    ### Recommendations (2, best first): ###
+    1 - S6 - <NA> - <NA>
+    2 - S7 - <NA> - <NA>
+    -- Recommendation calculation for user U12 completed (3/3) --
+    -- Recommendation calculation completed --
+    Calculating recommendations for 3 users took 0.153 seconds (0.051 s per user).
+    Application terminated without exceptions.
+    ````
 
 
