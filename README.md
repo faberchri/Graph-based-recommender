@@ -1,7 +1,7 @@
 Graph-based Recommender
 =======================
 
-Graph-based recommender for positive only feedback dataset using Gremlin graph query language.
+Graph-based recommender for BBC positive only feedback dataset using Gremlin graph query language.
 
 How-To-Run
 ----------
@@ -17,6 +17,17 @@ How-To-Run
     ```bash
     titan-all-0.4.4/bin/gremlin.sh -e path/to/Graph-based-recommender/main.groovy -p dir/for/optional/graph/serialization -u some,user,ids,to,process path/to/BBC/dataset path/to/output/directory
     ```
+
+Graph Structure
+-----
+Graphs queried for recommendations have the structure depicted below.
+* Vertices in red: User
+* Vertices in cyan: Shows
+* Vertices in purple: Show Attributes (e.g. 'genres/comedy' or 'service/bbcfour')
+* User -> Show edge: 'watched'
+* Show -> Attribute edge: 'show has attribute'
+
+![][sample-graph.svg]
 
 
 Recommendation Strategies
