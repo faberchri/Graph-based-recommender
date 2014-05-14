@@ -22,7 +22,8 @@ class SimpleCollaborativeFilteringRecommendationStrategy implements IRecommendat
 
 	List recommendShowsToUser(Vertex user){
 		// get all shows watched by users that also watched a show of the current user in random order
-		return user.as('currentUser').out('watched').in('watched').except('currentUser').out('watched').unique().toList();
+		def showsWatchedByCurrentUser = [];
+		return user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).unique().toList();
 	}
 }
 
