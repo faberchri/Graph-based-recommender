@@ -27,6 +27,8 @@ Graphs queried for recommendations have the structure depicted below.
 * User -> Show edge: 'watched'
 * Show -> Attribute edge: 'show has attribute'
 
+If a user watches the same show more than once the graph contains multiple 'watched' edges between the user and the show.
+
 ![Alt text](sample-graph.svg)
 
 
