@@ -2,6 +2,7 @@ Graph-based Recommender
 =======================
 
 Graph-based recommender for BBC positive only feedback dataset using Gremlin graph query language.
+See the excellent [blog post of M. Rodriguez](http://markorodriguez.com/2011/09/22/a-graph-based-movie-recommender-engine/) to get an idea of the basic principles of a graph-based recommender system.
 
 How-To-Run
 ----------
