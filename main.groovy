@@ -14,7 +14,11 @@ class Globals {
 	static int numberOfCalculationThreads = Runtime.getRuntime().availableProcessors();
 }
 
-class SimpleCollaborativeFilteringRecommendationStrategy {
+interface IRecommendationStrategy{
+	List<Vertex> recommendShowsToUser(Vertex user);
+}
+
+class SimpleCollaborativeFilteringRecommendationStrategy implements IRecommendationStrategy{
 
 	List recommendShowsToUser(Vertex user){
 		// get all shows watched by users that also watched a show of the current user in random order
@@ -22,13 +26,12 @@ class SimpleCollaborativeFilteringRecommendationStrategy {
 	}
 }
 
-class RankedCollaborativeFilteringRecommendationStrategy {
+class RankedCollaborativeFilteringRecommendationStrategy implements IRecommendationStrategy{
 
 	List recommendShowsToUser(Vertex user){
 		// find all path from current user to new shows in one other user distance, count number of paths to new show, order descending by counts 
 		def showsWatchedByCurrentUser = [];
-		def res = user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
-		return res;
+		return user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).groupCount.cap.orderMap(T.decr).toList();
 	}
 }
 
@@ -171,7 +174,7 @@ class Recommender {
 	def graph;
 	def parser;
 	def rootOuputDir;
-	def strategy = new RankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
+	IRecommendationStrategy strategy = new RankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
 
 	Recommender(def loadLoc, def rootOuputDir, def saveLoc){
 		def storage = TinkerStorageFactory.getInstance().getTinkerStorage(TinkerGraph.FileType.JAVA);
