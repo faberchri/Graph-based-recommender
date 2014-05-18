@@ -45,6 +45,16 @@ class ItemAttributesConsideringRankedCollaborativeFilteringRecommendationStrateg
 	}
 }
 
+class RankedItemAttributesRecommendationStrategy implements IRecommendationStrategy{
+
+	List recommendShowsToUser(Vertex user){
+		// get attributes of all users shows, get unwatched shows with same attributes, rank shows by number of paths to the show and append to end of result list, loop starting from previously found shows
+		def l=[]; def a=[]; def s=[];
+		user.out('watched').as('x').except(s).aggregate(s).out('hasAttribute').except(a).aggregate(a).in('hasAttribute').except(s).gather{def counts=it.countBy{it}; counts=counts.sort{i, j -> j.value <=> i.value}; l.addAll(counts.keySet()); return it}.scatter.loop('x'){it.loops < 20}.iterate();
+		return l
+	}
+}
+
 class Parser {
 
 	def datasetDir;
@@ -184,7 +194,7 @@ class Recommender {
 	def graph;
 	def parser;
 	def rootOuputDir;
-	IRecommendationStrategy strategy = new RankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
+	IRecommendationStrategy strategy = new ItemAttributesConsideringRankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
 
 	def writeOutputToFile = true;
 	def writeDescriptionToFile = true;
