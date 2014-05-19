@@ -45,6 +45,15 @@ class ItemAttributesConsideringRankedCollaborativeFilteringRecommendationStrateg
 	}
 }
 
+class ShowPopularityNormalizedRankedCollaborativeFilteringRecommendationStrategy implements IRecommendationStrategy{
+
+	List recommendShowsToUser(Vertex user){
+		// find all path from current user to new shows in one other user distance, count number of paths to new show, divide each count by number of incoming watched edges of show, order descending by counts 
+		def showsWatchedByCurrentUser = [];
+		return user.out('watched').aggregate(showsWatchedByCurrentUser).in('watched').out('watched').except(showsWatchedByCurrentUser).groupCount.cap.transform{ def m=[:]; it.each{k,v -> m.put(k, v/k.in.count())}; return m}.orderMap(T.decr).toList();
+	}
+}
+
 class RankedItemAttributesRecommendationStrategy implements IRecommendationStrategy{
 
 	List recommendShowsToUser(Vertex user){
@@ -194,7 +203,7 @@ class Recommender {
 	def graph;
 	def parser;
 	def rootOuputDir;
-	IRecommendationStrategy strategy = new ItemAttributesConsideringRankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
+	IRecommendationStrategy strategy = new ShowPopularityNormalizedRankedCollaborativeFilteringRecommendationStrategy(); // TODO: Select your favourite strategy
 
 	def writeOutputToFile = true;
 	def writeDescriptionToFile = true;
